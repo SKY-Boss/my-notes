@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import '../providers/notes_provider.dart';
 import '../services/file_service.dart';
@@ -351,6 +352,16 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
+  /// 全屏播放视频
+  void _playVideo(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _VideoPlayerScreen(videoPath: url),
+      ),
+    );
+  }
+
   // ─── 工具栏 ───
 
   Widget _buildToolbar() {
@@ -534,8 +545,6 @@ class _EditorScreenState extends State<EditorScreen> {
                   ),
                 ),
                 const Divider(height: 1),
-                _buildToolbar(),
-                const Divider(height: 1),
                 Expanded(
                   child: QuillEditor.basic(
                     controller: _quillController,
@@ -551,7 +560,7 @@ class _EditorScreenState extends State<EditorScreen> {
                           setState(() {});
                           _modified = true;
                         }),
-                        _VideoEmbedBuilder(_smallEmbeds, () {
+                        _VideoEmbedBuilder(_smallEmbeds, (url) => _playVideo(url), () {
                           setState(() {});
                           _modified = true;
                         }),
@@ -559,6 +568,7 @@ class _EditorScreenState extends State<EditorScreen> {
                     ),
                   ),
                 ),
+                _buildToolbar(),
               ],
             ),
     );
@@ -603,8 +613,9 @@ class _ImageEmbedBuilder extends EmbedBuilder {
 
 class _VideoEmbedBuilder extends EmbedBuilder {
   final Set<String> smallEmbeds;
+  final void Function(String) onTap;
   final VoidCallback onChanged;
-  _VideoEmbedBuilder(this.smallEmbeds, this.onChanged);
+  _VideoEmbedBuilder(this.smallEmbeds, this.onTap, this.onChanged);
 
   @override String get key => 'video';
 
@@ -618,9 +629,12 @@ class _VideoEmbedBuilder extends EmbedBuilder {
         if (small) { smallEmbeds.remove(url); } else { smallEmbeds.add(url); }
         onChanged();
       },
-      child: Container(height: small ? 100 : 180,
-        decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-        child: const Center(child: Icon(Icons.play_circle_outline, size: 48, color: Colors.white70)),
+      child: GestureDetector(
+        onTap: () => onTap(url),
+        child: Container(height: small ? 100 : 180,
+          decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+          child: const Center(child: Icon(Icons.play_circle_outline, size: 48, color: Colors.white70)),
+        ),
       ),
     );
   }
@@ -642,6 +656,83 @@ class _EmbedWrapper extends StatelessWidget {
             ? SizedBox(width: 120, height: 120,
                 child: FittedBox(fit: BoxFit.contain, child: child))
             : child,
+      ),
+    );
+  }
+}
+
+// ─── 全屏视频播放 ───
+
+class _VideoPlayerScreen extends StatefulWidget {
+  final String videoPath;
+  const _VideoPlayerScreen({required this.videoPath});
+
+  @override
+  State<_VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+}
+
+class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
+  late VideoPlayerController _controller;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.file(File(widget.videoPath))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() => _initialized = true);
+          _controller.play();
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: _initialized
+            ? AspectRatio(
+                aspectRatio: _controller.value.aspectRatio,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    VideoPlayer(_controller),
+                    VideoProgressIndicator(_controller, allowScrubbing: true),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (_controller.value.isPlaying) {
+                            _controller.pause();
+                          } else {
+                            _controller.play();
+                          }
+                        });
+                      },
+                      child: Center(
+                        child: AnimatedOpacity(
+                          opacity: _controller.value.isPlaying ? 0.0 : 1.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: const Icon(Icons.play_circle_fill,
+                              size: 64, color: Colors.white54),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : const CircularProgressIndicator(color: Colors.white),
       ),
     );
   }
