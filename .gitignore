@@ -36,3 +36,6 @@ Thumbs.db
 
 # Migration data (may contain personal notes)
 migration/
+
+# Personal development log
+开发日志.md
